@@ -1,0 +1,351 @@
+\input{config.tex}
+
+\title{存储技术基础大作业}
+\author{张钰晖}
+
+
+\begin{document}
+ 
+\maketitle
+\tableofcontents
+\newpage
+
+\section{THFS简介}
+
+THFS是一个基于FUSE的用户空间文件系统，通过挂载到网络学堂对应的网络空间，实现了到网络学堂的本地文件系统映射，通过THFS，用户可以在macOS和Linux下基于用户名和密码登录网络学堂并建立起相应的文件系统挂载点，可以打开复制相应的文件。在网络学堂方面，则是实现了课程公告、课程信息、课程文件等多个栏目的文件（信息）爬取，并建立合理的目录项来存储它们的文件节点，同时实现了简单的文件上传功能。
+
+\section{FUSE简介}
+
+FUSE是一个用于开发用户级文件系统的库，支持macOS和Linux操作系统，它定义了和文件系统操作相关的中间件，并以API的形式封装成相应函数，使得用户只需要实现相关函数，就能实现自己的文件系统，同时FUSE支持将远程文件看做本地文件，因此可以开发出基于网上文件的文件系统，比如网络学堂，就是一个有着非常多文件管理，支持上传下载的网站，我们的目标就是基于FUSE实现网络学堂的本地文件系统实现。
+
+\section{运行环境配置}
+
+\subsection{操作系统}
+
+THFS支持macOS与Linux操作系统。
+
+\paragraph{macOS操作系统} THFS支持macOS操作系统，在macOS 10.13操作系统上能够良好运行。
+
+\paragraph{Linux操作系统} THFS支持Linux操作系统，在Parallel Desktop安装的Ubuntu 14.04 LTS和Ubuntu 16.04 LTS镜像上能够良好运行。
+
+\subsection{Python}
+
+为了保证macOS运行（无法使用Python2），我们需要安装Python3，安装方法如下：
+
+\subsubsection{macOS操作系统} 
+
+\begin{lstlisting}
+brew install python3
+\end{lstlisting}
+
+brew是一款在mac上非常实用的安装工具，brew的安装可以参见网上的教程，需要注意brew有些地方需要Xcode支持，需要保证mac的Xcode版本较新。
+
+\subsubsection{Linux操作系统} 
+
+\begin{lstlisting}
+sudo apt install python3
+\end{lstlisting}
+
+以上操作会自动安装python-dev，保证可以\#include<Python.h>，如果仍然无法编译，则尝试手动安装python3-dev：
+
+\begin{lstlisting}
+sudo apt install python3-dev
+\end{lstlisting}
+
+\subsection{FUSE}
+
+为了保证和macOS一致性（见问题汇总），Linux下我们使用的29版本，安装方法如下：
+
+\paragraph{macOS操作系统} 安装FUSE for macOS v3.8.0
+
+\paragraph{Linux操作系统} 安装FUSE for Linux v29
+ 
+首先下载对应的程序，按照教程方法编译执行即可，可能会遇到一些编译问题，在之后我们给出了自己遇到的问题及解决方案。
+
+
+\section{使用说明}
+
+\subsection{编译}
+我们实现了makefile用于编译，编译时直接make即可：
+\begin{lstlisting}
+gcc thfs.c -D_FILE_OFFSET_BITS=64 `pkg-config fuse python3 --cflags --libs` -o thfs
+\end{lstlisting}
+其中pkg-config会自动寻找链接的库，添加-I、-L、-l等编译参数，否则编译的时候可能不能找到fuse.h和Python.h，且添加绝对路径的方法未必能奏效。
+
+\subsection{挂载}
+使用命令行终端执行，指令为：
+
+\begin{lstlisting}
+./thfs -d mountpoint username password
+\end{lstlisting}
+
+mountpoint表示希望文件系统的挂载点，输入一个路径，系统将会在该地址处生成文件挂载点。username和password分别代表网络学堂的账号密码，不正确可能会因为拒绝访问而产生错误。
+
+\subsection{卸载}
+
+使用命令行终端执行，指令为：
+
+\begin{lstlisting}
+sudo umount mountpoint
+\end{lstlisting}
+mountpoint表示文件系统的实际挂载点，输入一个路径
+
+或者通过GUI手动推出
+
+
+\section{运行结果}
+
+\subsection{macOS操作系统}
+
+\image[4.5in]{4.png}{用户课程}
+
+\image[4.5in]{7.png}{课程文件}
+
+\image[4.5in]{6.png}{课程公告}
+
+\image[4.5in]{5.png}{课程信息}
+
+\image[4.5in]{8.jpeg}{文件上传}
+
+\subsection{Linux操作系统}
+
+\image[4.5in]{1.png}{课程文件}
+
+\image[4.5in]{2.png}{课程公告}
+
+\image[4.5in]{3.png}{课程信息}
+
+\section{实现框架}
+
+\subsection{文件组成}
+本次大作业一共有四个主要编码文件：
+\begin{itemize}
+	\item main.c ：实现FUSE API中的相关函数，定义自己的文件系统；其中实现了getattr、readdir、read、write、create等文件基本操作，通过调用util.c中的相应功能函数，用于完成所需的功能。
+	\item util.h ：结构化方法编程，其中使用到的主要几个结构体，User、File、Course。
+	\item util.py ：爬虫相关操作，分别实现对于课程公告、课程信息、课程文件的爬取，同时定义相关函数获取对应文件(信息)，以元组的形式返回，方便C中调用。
+	\item util.c ： 在C中调用相应的python函数，实现对应的功能，可以理解为对于相应函数的一层C的封装，同时基于函数的返回结果，将相关数据以C中结构的方式保存。
+\end{itemize}
+
+\subsection{整体流程}
+在main.c中定义了FUSE的相关操作函数，以函数指针的形式定义了自己的文件系统格式，调用fuse\_main()，则此文件系统会挂载到对应路径。在每一个操作中对应的和网络学堂相关的操作，封装成具体的功能函数，它们的实现在util.c中，util.c的功能是在利用python-dev在C中调用python代码，获得相关数据信息，并存储在C的结构体中，实际的爬虫相关工作在util.py中实现。
+
+\section{核心实现}
+
+\subsection{FUSE API的实现}
+首先在我们的设计中THFS文件系统有两级目录，第一级表示课程名，在挂载文件系统时自动创建所有用户正在上的课程目录，第二级表示不同的栏目，有课程文件、课程公告两个子目录和课程信息文件。
+
+而在FUSE文件系统相关操作中，最重要的参数就是path，表示文件的路径，和buf，表示当前文件或目录的相关数据。
+
+所以以thfs\_readdir为例介绍FUSE文件系统的机制。
+
+\begin{lstlisting}
+static int thfs_readdir(const char *path, void *buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info *fi) {
+    (void) offset;
+    (void) fi;
+    //////////////////////////////////////////////////////////////////////////////////////////////
+    const char *curpath = path;
+    if (strcmp(curpath, "/") == 0) {
+        filler(buf, ".", NULL, 0);
+        filler(buf, "..", NULL, 0);
+        struct Course *course = user->course_list;
+        while(course) {
+            filler(buf, course->name, NULL, 0);
+            course = course->next;
+        }
+        filler(buf, "Upload", NULL, 0);
+        return 0;
+    }
+    //////////////////////////////////////////////////////////////////////////////////////////////
+    curpath = curpath + 1;
+    if (strstr(curpath, "Upload") == curpath) {
+        filler(buf, ".", NULL, 0);
+        filler(buf, "..", NULL, 0);
+        if (user->upload_file != NULL) {
+            filler(buf, user->upload_file->name, NULL, 0);
+        }
+        return 0;
+    }
+    struct Course *course = user->course_list;
+    while (course) {
+        if (strstr(curpath, course->name) == curpath) {
+            if (strlen(course->name) == strlen(curpath)) {
+                filler(buf, ".", NULL, 0);
+                filler(buf, "..", NULL, 0);
+                filler(buf, "Note", NULL, 0);
+                filler(buf, "Info", NULL, 0);
+                filler(buf, "File", NULL, 0);
+                return 0;
+            }
+            else {
+                break;
+            }
+        }
+        course = course->next;
+    }
+    //////////////////////////////////////////////////////////////////////////////////////////////
+    curpath = curpath + strlen(course->name) + 1;
+    if (strstr(curpath, "File") == curpath) {
+        filler(buf, ".", NULL, 0);
+        filler(buf, "..", NULL, 0);
+        GetCourseFile(course);
+        struct File *file = course->file_list;
+        while (file) {
+            filler(buf, file->name, NULL, 0);
+            file = file->next;
+        }
+        return 0;
+    }
+    else if(strstr(curpath, "Note") == curpath) {
+        filler(buf, ".", NULL, 0);
+        filler(buf, "..", NULL, 0);
+        GetCourseNote(course);
+        struct File *file = course->note_list;
+        while (file) {
+            filler(buf, file->name, NULL, 0);
+            file = file->next;
+        }
+        return 0;
+    }
+    return 0;
+}
+\end{lstlisting}
+
+几乎所有的操作都包含path和buf，此外传入一个函数指针FUSE\_file\_info，是一个用来记录相应文件信息的结构，我们基本用不到；
+
+我们先利用爬虫将所有数据信息，如课程、消息、文件名等以结构体的方式保存（而不是直接下载，那就失去文件系统的意义），一般的流程都是先在二级目录的结构上找到path对应的结构体的名称，第零级寻找根目录，第一级寻找对应的course，第二级寻找相应栏目。在课程文件、课程公告等中分别调用对应的函数去获取相应目录的文件信息。通过strstr函数和strlen函数可以很好的实现寻径。
+
+另外一点特殊的是FUSE\_fill\_dir\_t是一个函数指针，使用它来完成对于buf的修改。
+
+\subsubsection{相关函数实现}
+对于课程相关的文件我们以User-Course-File的结构保存他们的相关信息，一共有getattr、readdir、open、read、write、create等操作：
+
+\begin{itemize}
+\item getattr ： 获取目录和文件的状态信息，按照多级访问的方法，将目录设置为目录项，文件设置为文件节点，并可读可写，设置链接数和大小。
+\item readdir ：获取目录项的相关数据，对于两级目录，除了自身和上一级的节点外，根目录有upload和各个课程对应文件夹，各个课程文件夹内有Note、File文件夹，分别代表公告和文件，Info表示课程信息。使用filler方法把这些节点都存储在buf中，表明当前目录的相关数据。
+\item open ：按路径检查文件是否存在，是否可以打开，获取打开的文件指针，对于上传文件夹中的文件，调用上传相关函数，从而达到上传的效果。
+\item read ：按路径得到文件名后，对于课程文件一栏，需要调用文件下载函数来下载对应的文件。
+\item write ：对于课程相关的文件并不支持write操作，对于upload文件，write的时候向缓冲区（/tmp/thfs）缓存相同的文件。
+\end{itemize}
+
+\subsection{Python调用C的实现}
+在Python.h中分别定义了几类方法来使用python中不同的语句，这些在util.c中有大量使用。
+
+\begin{itemize}
+\item 在使用python-dev前要调用Py\_Initialize()，使用后要调用Py\_Finalize()。
+\item 对于单句指令调用，使用PyRun\_SimpleString(cmd），像库加载这类语句一定要通过这种方式在C中加载，否则当你加载函数的时候，可能会出现函数中使用的对应库中的数据、函数不能工作。
+\item 对于脚本调用，使用PyImport\_ImportModule(fileName)，记为pModule;
+\item 对于函数调用，函数的名称通过PyObject\_GetAttrString(pModule, funcName)传递，记为pFunc;函数的参数通过一个元祖pArgs传递，调用PyTuple\_New(num)创建相应的元祖，并利用PyTuple\_SetItem()设置相应参数；通过PyEval\_CallObject()得到相应函数的返回值，因此在实现的时候我们要把所有想要保存的数据以一个元组的方式存起来返回，这在util.py中是对应的。
+\end{itemize}
+
+\subsection{文件收集、存储与上传}
+
+\subsubsection{课程信息}
+
+课程信息存储在内存中，struct Course其中有一个成员变量info[10000]用于存储，在初始化用户所有课程时，以上信息便会被获取并保存在内存中。
+
+\subsubsection{课程公告}
+
+课程公告存储在文件中（存储在/tmp/thfs/缓存文件夹中），在获取用户课程时，公告会被直接读取并以文件形式在本地存储。
+
+\subsubsection{课程文件}
+
+课程文件存储在文件中（存储在/tmp/thfs/缓存文件夹中），只有当请求某一文件时，对应的文件才会被下载。
+
+需要注意的是，由于文件系统本身的并发机制，实际在执行的时候会有多个调用C调用python的实例，文件本身相比于课程信息和课程公告一般很大，若同时请求多个文件会出现Segementation Fault的问题，导致文件系统的崩溃，因此在下载文件时增加了互斥锁用于避免崩溃。
+
+\subsubsection{文件上传}
+
+实现了一个简单的文件上传功能来验证文件系统相关操作的正确性，支持txt，在upload中存储，当新写入文件时旧文件自动消失，新文本文件中的内容将会传到存储系统第二次的作业中。
+
+暂时实现比较简单，相较于其他文件采用User-Course-File的结构，直接在User中维护一个File* upload\_file，因为它要支持写入操作，所以在write的时候向缓冲区（/tmp/thfs）缓存相同的文件，其他操作和课程相关内容一致。
+
+出于和下载相同的考虑，在上传文件时增加了互斥锁用于避免崩溃。
+
+\section{问题汇总}
+
+\subsection{FUSE安装问题}
+
+在Mac下，FUSE下载安装过程中可能会出现编译错误问题，原因是Mac下默认的gcc其实和我们以为的gcc是有差别的，而FUSE的实现是比较偏底层的纯C，编译就会出现问题，解决办法是安装Xcode Command Line Tools，方法是在终端输入：
+
+\begin{lstlisting}
+xcode-select --install
+\end{lstlisting}
+并在出现提示框后按照流程走就好。
+
+它的作用是用Xcode的gcc取代Mac终端使用的默认gcc，而在Xcode下编译就不会出现问题，从而正常安装。
+
+\subsection{FUSE版本问题}
+
+在实验中发现，尽管Linux的FUSE版本已经出到了36，但macOS可编译的FUSE版本必须低于30，因为30版本之后很多函数都发生了变化。
+
+最终为了保证macOS和Linux都可以运行，选用FUSE 29作为最终版本。
+
+\subsection{fuse.h和Python.h找不到问题}
+
+由于FUSE和LibPython都不是系统标准库，故需要在gcc编译参数中增加-I、-L、-l等多个指定链接文件的编译参数。
+
+在mac下可能会出现fuse.h和Python.h找不到的问题，一开始我们以为是FUSE没有装好或是版本落后等问题，但实际上是FUSE的路径不是系统默认路径，添加路径支持即可，但不同系统和环境下的路径是不同的，因此选择使用`pkg-config这一工具，通过`pkg-config FUSE python3 --cflags --libs`可以找到python3-dev和FUSE的资源库。
+
+\subsection{FUSE运行问题}
+
+FUSE运行必须加参数-d，如果不加文件系统则无法正常运行。
+
+\subsection{C调用python问题}
+
+因为我们要实现基于网络学堂的文件系统，爬虫是必须的工作，但不论是我们的个人经验还是网上的资料，都是基于python的爬虫技术会更简单和强大，因此我们非常希望能利用python来完成网络相关的操作。
+
+但是如何在C中调用python是一个复杂的问题，还好在python-dev中提供了Python.h，这是一个强大的接口，可以很方便的在C中嵌入python，主要遇到的问题是两个：
+
+一是Python.h找不到的问题，这在之前已经讲过。
+
+二是在C中一些python的module不能加载。在C中使用python模块如果使用到了其他python库，我们需要在C中加载这些库。
+一开始我们没想过拓展到macOS的时候是使用python2爬的虫，但到了mac下使用C调用python2的urllib2就会报错，这个问题我们在网上查了很久，得知原因是macOS本身有很严格的系统保护模式，C调用python中的一些操作可能违反了操作系统安全性因而被禁止，但网上并没有给出解决方法，自己也调了很久始终没有解决方法，因此只好重新用python3写，这个问题才得以解决。
+
+\subsection{Python编码问题}
+
+在爬虫中经常会遇到编码的问题，我们在实现时主要遇到了两个问题：
+
+一是python3链接只支持utf-8字符，而网络学堂有些链接含中文字符，所以必须使用urllib.parse.quote进行转义，转义时不能对一些特殊字符进行转义，需要加以限制。
+
+二是一开始显示课程信息始终显示不全，通过二进制打开文件仔细比对发现是文件的大小有问题，经过分析发现是因为Python3中所有str都是unicode，在设置文件大小的时候，len(str)是中文文本的长度，而不是字节的长度。例如"今天天气真好"的len是6，而实际占用的字节数远远不只6。通过改成len(str.encode('utf-8'))，将str转成bytes得以解决。
+
+\subsection{同步互斥问题}
+
+当文件系统成功挂载后，我们发现系统很容易会挂，尤其是打开文件的时候，很容易发生Segmentation Fault，经过仔细研究发现，当同时从C并发调用Python函数时，libpython库会崩掉。
+
+而FUSE文件系统显然是支持并发的，因此我们认为可能是因为同步互斥会导致C调用Python崩掉，最后的解决办法是增加线程互斥锁，通过设置临界区，在最可能同步互斥的地方（下载文件函数处）进行lock和unlock，解决了这个问题。具体实现就像下面这样：
+
+\begin{lstlisting}
+pthread_mutex_lock(&mutex);
+strcpy(file->path, buffer_path);
+strcat(file->path, file->name);
+DownloadFile(file);
+pthread_mutex_unlock(&mutex);
+\end{lstlisting}
+
+\section{实验总结}
+
+通过本次实验，我们通过实际的FUSE编程完成了一个基于网络学堂的文件系统，对于用户级文件系统有了更加深入的认识。
+
+在这个过程中，我们收获颇丰，深入了理解了文件系统、FUSE、编译原理、C对Python调用、同步互斥问题、爬虫等多个知识点，极大地锻炼了编程能力，也对实际的文件系统产生了强烈的兴趣。
+
+\section{致谢}
+
+感谢Stackoverflow帮助我们解决了无数的问题。
+
+感谢无私的网友贡献的各种教程帮助我们完成了本次编码。
+
+\section{参考文献}
+
+以下列举出了部分重要的参考文献：
+
+[FUSE编程](https://cloud.tencent.com/developer/article/1039270)
+
+[FUSE编译](https://blog.csdn.net/zgl07/article/details/7558766)
+
+[使用 FUSE 开发自己的文件系统](https://www.ibm.com/developerworks/cn/linux/l-fuse/)
+
+[C调用Python](https://www.cnblogs.com/Hisin/archive/2012/02/27/2370590.html)
+
+
+\end{document}
